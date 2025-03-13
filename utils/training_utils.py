@@ -46,7 +46,7 @@ def accuracy(logits, targets):
 def get_run_name(args):
     name = args.dataset
     if args.dataset == 'graph':
-        name += '_deg' + str(args.deg) + '_path_' + str(args.path_len) + 'num_nodes_' + str(args.num_nodes) + \
+        name += '_deg' + str(args.deg) + '_min-path_' + str(args.min_path_len) + '_max-path_' + str(args.max_path_len) + 'num_nodes_' + str(args.num_nodes) + \
                 '_ntrain_' + str(args.n_train) + '_teacherless_' + str(args.teacherless) + '_reverse_' + str(args.reverse)
     elif args.dataset == 'chess':
         name += '_mate_in_' + str(args.mate_in) + '_ntrain_' + str(args.n_train) + '_unrolled_' + str(args.unrolled) + \

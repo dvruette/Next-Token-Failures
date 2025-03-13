@@ -14,26 +14,24 @@ class Tokenizer:
         """
         Takes a list of prefix-target pairs, tokenizes and concatenates them
         """
-        out = []
-        prefix_len = len(self.encode(data_list[0][0]))
-        target_len = len(self.encode(data_list[0][1]))
-        same_len = True
+        seqs = []
+        loss_masks = []
 
+        max_len = 0
         for prefix, target in data_list:
             prefix = torch.tensor(self.encode(prefix))
             target = torch.tensor(self.encode(target))
-            if not (len(prefix) == prefix_len and len(target) == target_len):
-                same_len = False
-            seq = torch.concatenate([prefix, target], dim=-1).long()
-            out.append(seq)
+            seq = torch.concatenate([prefix, target], dim=-1).long() + 1
+            max_len = max(len(seq), max_len)
+            seqs.append(seq)
+            loss_mask = torch.cat([torch.zeros(len(prefix)), torch.ones(len(target))]).long()
+            loss_masks.append(loss_mask)
 
-        # Check if all prefixes and all targets have the same length
-        if not same_len:
-            print('Not all prefixes or targets have the same length!!')
-        else:
-            print('Equal sequence lengths!')
+        # add padding
+        seqs = [torch.cat([seq, torch.zeros(max_len - len(seq)).long()]) for seq in seqs]
+        loss_masks = [torch.cat([mask, torch.zeros(max_len - len(mask)).long()]) for mask in loss_masks]
 
-        return out, prefix_len, target_len
+        return seqs, loss_masks
 
 
 def get_tokenizer(args):

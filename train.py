@@ -43,7 +43,10 @@ parser.add_argument(
     "--deg", default=2, type=int, help="Degree of starting node"
     )
 parser.add_argument(
-    "--path_len", default=5, type=int, help="Path length in star graph"
+    "--min_path_len", default=5, type=int, help="Min. path length in star graph"
+    )
+parser.add_argument(
+    "--max_path_len", default=5, type=int, help="Max. path length in star graph"
     )
 parser.add_argument(
         "--mate_in", default=2, type=int, help="For chess, number of moves to checkmate"
@@ -76,7 +79,7 @@ parser.add_argument(
         "--eval_train", action=argparse.BooleanOptionalAction, default=False, help="Eval for training set",
     )
 parser.add_argument(
-        "--eval_every", type=int, default=5000, help="Interval (in steps) to evaluate the model on test",
+        "--eval_every", type=int, default=5, help="Interval (in epochs) to evaluate the model on test",
     )
 parser.add_argument(
         "--use_wandb", action=argparse.BooleanOptionalAction, default=False, help="Whether to use wandb",
@@ -168,7 +171,7 @@ for ep in range(args.epochs):
         with ctx:
             logits, loss, accs = model(x, y)
 
-        total_loss.update(loss.item(), x.shape[0] * train_data.num_target_tokens)
+        total_loss.update(loss.item(), (y != -1).sum().item())
         total_acc.update(accs['acc'], x.shape[0])
         scaler.scale(loss).backward()
         scaler.step(optimizer)

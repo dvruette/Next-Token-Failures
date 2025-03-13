@@ -4,7 +4,7 @@ import numpy as np
 import random
 
 
-def star_graph(degSource, pathLen, numNodes, reverse=False):
+def star_graph(degSource, minPathLen, maxPathLen, numNodes, reverse=False):
     source = np.random.randint(0, numNodes, 1)[0]
     goal = np.random.randint(0, numNodes, 1)[0]
     while goal == source:
@@ -12,6 +12,8 @@ def star_graph(degSource, pathLen, numNodes, reverse=False):
 
     path = [source]
     edge_list = []
+
+    pathLen = np.random.randint(minPathLen, maxPathLen + 1, 1)[0]
 
     # Choose random nodes along the path
     for _ in range(pathLen - 2):
@@ -32,6 +34,7 @@ def star_graph(degSource, pathLen, numNodes, reverse=False):
 
     i = 0
     deg_nodes = set()
+
     while i < degSource - 1:
         # Add neighbour to source
         node = source
@@ -54,16 +57,16 @@ def star_graph(degSource, pathLen, numNodes, reverse=False):
     return path, edge_list, source, goal
 
 
-def generate_and_save(n_train, n_test, degSource, pathLen, numNodes, reverse=False):
+def generate_and_save(n_train, n_test, degSource, minPathLen, maxPathLen, numNodes, reverse=False):
     """
     Generate a list of train and testing graphs and save them for reproducibility
     """
-    file = open('../data/datasets/graphs/' + 'deg_' + str(degSource) + '_path_' + str(pathLen) + '_nodes_' + str(
+    file = open('../data/datasets/graphs/' + 'deg_' + str(degSource) + '_min-path_' + str(minPathLen) + '_max-path_' + str(maxPathLen) + '_nodes_' + str(
         numNodes) + '_train_' +
           str(n_train) + '.txt', 'w')
 
     for i in range(n_train):
-        path, edge_list, start, goal = star_graph(degSource, pathLen, numNodes, reverse=reverse)
+        path, edge_list, start, goal = star_graph(degSource, minPathLen, maxPathLen, numNodes, reverse=reverse)
         path_str = ''
         for node in path:
             path_str += str(node) + ','
@@ -79,12 +82,12 @@ def generate_and_save(n_train, n_test, degSource, pathLen, numNodes, reverse=Fal
         file.write(out + '\n')
     file.close()
 
-    file = open('../data/datasets/graphs/' + 'deg_' + str(degSource) + '_path_' + str(pathLen) + '_nodes_' +
+    file = open('../data/datasets/graphs/' + 'deg_' + str(degSource) + '_min-path_' + str(minPathLen) + '_max-path_' + str(maxPathLen) + '_nodes_' +
                 str(numNodes) + '_test_' +
                  str(n_test) + '.txt', 'w')
 
     for i in range(n_test):
-        path, edge_list, start, goal = star_graph(degSource, pathLen, numNodes, reverse=reverse)
+        path, edge_list, start, goal = star_graph(degSource, minPathLen, maxPathLen, numNodes, reverse=reverse)
         path_str = ''
         for node in path:
             path_str += str(node) + ','
@@ -130,9 +133,9 @@ class Graphs(Dataset):
         self.reverse = reverse
 
         self.data_file = prefix_target_list(self.data_path, reverse=reverse)[:n_samples]
-        self.tokenized, self.num_prefix_tokens, self.num_target_tokens = tokenizer.tokenize(self.data_file)
+        self.tokenized, self.loss_masks = tokenizer.tokenize(self.data_file)
 
-        self.num_tokens = self.num_prefix_tokens + self.num_target_tokens
+        self.num_tokens = len(self.tokenized[0])
 
     def __len__(self):
         return len(self.data_file)
@@ -140,7 +143,7 @@ class Graphs(Dataset):
     def __getitem__(self, idx):
         if self.eval_mode:
             # In eval mode return the entire sequence
-            return self.tokenized[idx].to(self.device)
+            return self.tokenized[idx].to(self.device), self.loss_masks
 
         # Create inputs
         x = self.tokenized[idx][:-1].clone()
@@ -149,8 +152,10 @@ class Graphs(Dataset):
             x = x.to(self.device)
         # Create targets in the form [-1, ..., -1, 4, 7, 9, 2, ...] where we replace the prefix tokens by -1 so that
         # we can skip their gradient calculation in the loss (double-check if that's correct)
-        y = torch.cat([-torch.ones((self.num_prefix_tokens - 1, )),
-                       self.tokenized[idx][self.num_prefix_tokens:].clone()])
+        # y = torch.cat([-torch.ones((self.num_prefix_tokens - 1, )),
+        #                self.tokenized[idx][self.num_prefix_tokens:].clone()])
+        y = self.tokenized[idx] * self.loss_masks[idx] + (-1) * (1 - self.loss_masks[idx])
+        y = y[1:]
 
         return x.to(self.device), y.long().to(self.device)
 
@@ -220,11 +225,12 @@ if __name__ == '__main__':
     # Create graphs and save
     n_train = 200000
     n_test = 20000
-    deg = 2
-    path_len = 5
+    deg = 5
+    min_path_len = 5
+    max_path_len = 5
     num_nodes = 50
     reverse = False
-    generate_and_save(n_train=n_train, n_test=n_test, degSource=deg, pathLen=path_len, numNodes=num_nodes,
+    generate_and_save(n_train=n_train, n_test=n_test, degSource=deg, minPathLen=min_path_len, maxPathLen=max_path_len, numNodes=num_nodes,
                       reverse=reverse)
 
     # Load data
@@ -232,7 +238,7 @@ if __name__ == '__main__':
     args = types.SimpleNamespace(model='gpt', num_nodes=num_nodes)
     args.dataset = 'graph'
     args.deg = deg
-    args.path_len = path_len
+    args.path_len = max_path_len
     args.n_train = n_train
     args.n_test = n_test
     args.reverse = False
@@ -247,7 +253,7 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
     import networkx as nx
-    path, edge_list, start, goal = star_graph(deg, path_len, num_nodes, reverse=reverse)
+    path, edge_list, start, goal = star_graph(deg, max_path_len, num_nodes, reverse=reverse)
     print(len(edge_list))
     print(path)
     print(edge_list)

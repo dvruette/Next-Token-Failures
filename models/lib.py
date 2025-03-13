@@ -5,7 +5,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 if torch.cuda.is_available():
-    from flash_attn import flash_attn_func
+    try:
+        from flash_attn import flash_attn_func
+        has_flash = True
+    except ImportError:
+        print('Flash attention not available, falling back to normal attention')
+        has_flash = False
 
 
 def gelu(x):
@@ -55,7 +60,7 @@ class Attention(nn.Module):
         self.head_dim = config.n_embd // config.n_heads
         self.n_embd = config.n_embd
 
-        if not config.use_flash:
+        if not config.use_flash or not has_flash:
             self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
                                  .view(1, config.block_size, config.block_size, 1), persistent=False)
         else:
@@ -99,7 +104,7 @@ class Attention(nn.Module):
             seq_len = query_len
 
         # Here we could be faster with flash attention
-        if self.config.use_flash:
+        if self.config.use_flash and has_flash:
             out = flash_attn_func(queries, keys, values, causal=True)
         else:
             att = torch.einsum('bmhd,bnhd->bmnh', queries, keys)      # bsz x s1 x s2 x n_heads

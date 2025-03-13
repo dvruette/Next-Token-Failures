@@ -19,7 +19,7 @@ def get_dataset(args, tokenizer, device):
                           teacherless_token=teacherless_token, unrolled=args.unrolled)
 
     elif args.dataset == 'graph':
-        data_path = './data/datasets/graphs/deg_' + str(args.deg) + '_path_' + str(args.path_len) + '_nodes_' + \
+        data_path = './data/datasets/graphs/deg_' + str(args.deg) + '_min-path_' + str(args.min_path_len) + '_max-path_' + str(args.max_path_len) + '_nodes_' + \
                     str(args.num_nodes)
         train_path, test_path = data_path + '_train_200000.txt', data_path + '_test_20000.txt'
         train_data = Graphs(tokenizer=tokenizer, n_samples=args.n_train, data_path=train_path, device=device,
