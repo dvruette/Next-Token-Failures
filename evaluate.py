@@ -18,6 +18,7 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test'):
     model.eval()
     total_acc = AverageMeter()
     tokens_corr: dict[int, AverageMeter] = {}
+    path_corr: dict[int, AverageMeter] = {}
     bar = tqdm(loader)
 
     #model.set_cache(loader.dataset.device)
@@ -29,35 +30,34 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test'):
         prefix_lens = (x_ != 0).sum(dim=-1)
         total_lens = (x != 0).sum(dim=-1)
 
-        for i in range(len(x)):
-            prefix_len = prefix_lens[i]
-            xi = x[None, i, :prefix_len]
-            num_target_tokens = total_lens[i] - prefix_len
-            yi = x[None, i, prefix_len : prefix_len + num_target_tokens]
+        # Group sequences by prefix length and path length
+        groups = set(zip(prefix_lens.tolist(), total_lens.tolist()))
+
+        for prefix_len, total_len in groups:
+            ids = torch.where((prefix_lens == prefix_len) & (total_lens == total_len))[0]
+            xi = x[ids, :prefix_len]
+            num_target_tokens = total_len - prefix_len
+            yi = x[ids, prefix_len : prefix_len + num_target_tokens]
             with ctx:
                 y_pred = model.generate(xi, num_target_tokens, temperature=temperature, top_k=top_k)
-            correct = yi.eq(y_pred[:, -num_target_tokens:]).float()
-            completely_correct = torch.mean(correct.sum(dim=1).eq(num_target_tokens).to(torch.float))
-            total_acc.update(completely_correct.item(), 1)
 
+            # Check how many tokens we get right and how many predictions are completely correct
+            correct = yi.eq(y_pred[:, -num_target_tokens:]).float()
+
+            # Completely correct
+            completely_correct = torch.mean(correct.sum(dim=1).eq(num_target_tokens).to(torch.float))
+            total_acc.update(completely_correct.item(), len(ids))
+            if num_target_tokens not in path_corr:
+                path_corr[num_target_tokens] = AverageMeter()
+            path_corr[num_target_tokens].update(completely_correct.item(), len(ids))
+
+            # Individual token accuracy
             per_token_acc = correct.mean(dim=0)
             for j in range(num_target_tokens):
                 if j not in tokens_corr:
                     tokens_corr[j] = AverageMeter()
-                tokens_corr[j].update(per_token_acc[j].item(), 1)
+                tokens_corr[j].update(per_token_acc[j].item(), len(ids))
         #model.reset_cache()
-
-        # # Check how many tokens we get right and how many predictions are completely correct
-        # correct = y.eq(y_pred[:, -num_target_tokens:]).float()
-
-        # # Completely correct
-        # completely_correct = torch.mean(correct.sum(dim=1).eq(num_target_tokens).to(torch.float))
-        # total_acc.update(completely_correct.item(), x.shape[0])
-
-        # # Individual token accuracy
-        # per_token_acc = correct.mean(dim=0)
-        # for i in range(num_target_tokens):
-        #     tokens_corr[i].update(per_token_acc[i].item(), x.shape[0])
 
         bar.set_description(f'{mode} accuracy: {total_acc.get(percentage=True):.2f}')
 
@@ -71,6 +71,8 @@ def evaluate(model, loader, ctx, temperature, top_k, results=None, mode='test'):
         results[mode + '/accuracy'] = total_acc.get(percentage=True)
         for i in tokens_corr.keys():
             results[mode + '/token_' + str(i + 1)] = tokens_corr[i].get(percentage=True)
+        for i in path_corr.keys():
+            results[mode + '/path_' + str(i)] = path_corr[i].get(percentage=True)
     return results
 
 
