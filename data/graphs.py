@@ -143,7 +143,7 @@ class Graphs(Dataset):
     def __getitem__(self, idx):
         if self.eval_mode:
             # In eval mode return the entire sequence
-            return self.tokenized[idx].to(self.device), self.loss_masks
+            return self.tokenized[idx].to(self.device), self.loss_masks[idx].to(self.device)
 
         # Create inputs
         x = self.tokenized[idx][:-1].clone()
